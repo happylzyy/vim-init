@@ -38,6 +38,14 @@ set showcmd
 " 水平切割窗口时，默认在右边显示新窗口
 set splitright
 
+" 不要图形按钮
+set go= 
+
+" 设置字体
+set guifont=Consolas:h14
+
+" 设置中文字体
+set guifontwide=Microsoft\ Yahei\ Mono:h13
 
 "----------------------------------------------------------------------
 " 颜色主题：色彩文件位于 colors 目录中
@@ -50,7 +58,7 @@ set background=dark
 set t_Co=256
 
 " 设置颜色主题，会在所有 runtimepaths 的 colors 目录寻找同名配置
-color desert256
+color gruvbox
 
 
 "----------------------------------------------------------------------
@@ -286,6 +294,3 @@ endfunc
 set tabline=%!Vim_NeatTabLine()
 set guitablabel=%{Vim_NeatGuiTabLabel()}
 set guitabtooltip=%{Vim_NeatGuiTabTip()}
-
-
-
