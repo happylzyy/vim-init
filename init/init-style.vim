@@ -42,7 +42,7 @@ set splitright
 set go= 
 
 " 设置字体
-set guifont=Consolas:h14
+set guifont=DejaVu\ Sans\ Mono\ for\ Powerline:h14
 
 " 设置中文字体
 set guifontwide=Microsoft\ Yahei\ Mono:h13
