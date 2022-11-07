@@ -3,7 +3,7 @@
 " Maintainer: skywind3000 (at) gmail.com, 2016-2022
 " Homepage: https://github.com/skywind3000/asyncrun.vim
 "
-" Last Modified: 2022/06/14 20:43
+" Last Modified: 2022/10/12 00:33
 "
 " Run shell command in background and output to quickfix:
 "     :AsyncRun[!] [options] {cmd} ...
@@ -144,7 +144,7 @@ let g:asyncrun_hook = get(g:, 'asyncrun_hook', '')
 let g:asyncrun_last = get(g:, 'asyncrun_last', 0)
 
 " speed for each timer
-let g:asyncrun_timer = get(g:, 'asyncrun_timer', 50)
+let g:asyncrun_timer = get(g:, 'asyncrun_timer', 100)
 
 " previous exit code
 let g:asyncrun_code = get(g:, 'asyncrun_code', '')
@@ -234,9 +234,9 @@ endfunc
 function! s:AutoCmd(name)
 	if has('autocmd') && ((g:asyncrun_skip / 2) % 2) == 0
 		if g:asyncrun_silent
-			exec 'silent doautocmd User AsyncRun'.a:name
+			exec 'silent doautocmd <nomodeline> User AsyncRun'.a:name
 		else
-			exec 'doautocmd User AsyncRun'.a:name
+			exec 'doautocmd <nomodeline> User AsyncRun'.a:name
 		endif
 	endif
 endfunc
@@ -529,15 +529,15 @@ function! s:AsyncRun_Job_AutoCmd(mode, auto)
 	endif
 	if a:mode == 0
 		if g:asyncrun_silent
-			silent exec 'doautocmd QuickFixCmdPre '. name
+			silent exec 'doautocmd <nomodeline> QuickFixCmdPre '. name
 		else
-			exec 'doautocmd QuickFixCmdPre '. name
+			exec 'doautocmd <nomodeline> QuickFixCmdPre '. name
 		endif
 	else
 		if g:asyncrun_silent
-			silent exec 'doautocmd QuickFixCmdPost '. name
+			silent exec 'doautocmd <nomodeline> QuickFixCmdPost '. name
 		else
-			exec 'doautocmd QuickFixCmdPost '. name
+			exec 'doautocmd <nomodeline> QuickFixCmdPost '. name
 		endif
 	endif
 endfunc
@@ -862,6 +862,19 @@ function! s:AsyncRun_Job_Start(cmd)
 		let s:async_start = localtime()
 		let l:arguments = "[".l:name."]"
 		let l:title = ':AsyncRun '.l:name
+		if exists('g:asyncrun_show_time')
+			let t = g:asyncrun_show_time
+			let format = ''
+			if type(t) == type('')
+				let format = t
+			elseif type(t) == type(0)
+				let format = (t != 0)? '%Y/%m/%d %T' : ''
+			endif
+			if format != ''
+				let t = strftime(format, s:async_start)
+				let l:arguments .= ' (' . t . ')'
+			endif
+		endif
 		if !s:async_info.append
 			if s:async_nvim == 0
 				if v:version >= 800 || has('patch-7.4.2210')
@@ -1062,8 +1075,16 @@ function! asyncrun#fullname(f)
 	endif
 	if f == '%'
 		let f = expand('%')
-		if &bt == 'terminal' || &bt == 'nofile'
+		if &bt == 'terminal'
 			let f = ''
+		elseif &bt == 'nofile'
+			let is_directory = 0
+			if f =~ '[\/\\]$'
+				if f =~ '^[\/\\]' || f =~ '^.:[\/\\]'
+					let is_directory = isdirectory(f)
+				endif
+			endif
+			let f = (is_directory)? f : ''
 		endif
 	elseif f =~ '^\~[\/\\]'
 		let f = expand(f)
@@ -1537,24 +1558,7 @@ endfunc
 "----------------------------------------------------------------------
 function! s:DispatchEvent(name, ...)
 	if has_key(g:asyncrun_event, a:name)
-		let l:F = g:asyncrun_event[a:name]
-		if type(l:F) == type('')
-			let test = l:F
-			unlet l:F
-			let l:F = function(test)
-		endif
-		if a:0 == 0
-			call l:F()
-		else
-			let args = []
-			for index in range(a:0)
-				let args += ['a:' . (index + 1)]
-			endfor
-			let text = join(args, ',')
-			let cmd = 'call l:F(' . text . ')'
-			exec cmd
-		endif
-		unlet l:F
+		call call(g:asyncrun_event[a:name], a:000)
 	endif
 endfunc
 
@@ -2092,7 +2096,24 @@ endfunc
 " asyncrun - version
 "----------------------------------------------------------------------
 function! asyncrun#version()
-	return '2.9.12'
+	return '2.10.5'
+endfunc
+
+
+"----------------------------------------------------------------------
+" asyncrun - reset
+"----------------------------------------------------------------------
+function! asyncrun#reset()
+	call asyncrun#stop('!')
+	let s:async_state = 0
+	if exists('s:async_timer')
+		call timer_stop(s:async_timer)
+		unlet s:async_timer
+	endif
+	if exists('s:async_job')
+		unlet s:async_job
+	endif
+	let s:async_state = 0
 endfunc
 
 
@@ -2103,6 +2124,8 @@ command! -bang -nargs=+ -range=0 -complete=file AsyncRun
 		\ call asyncrun#run('<bang>', '', <q-args>, <count>, <line1>, <line2>)
 
 command! -bar -bang -nargs=0 AsyncStop call asyncrun#stop('<bang>')
+
+command! -nargs=0 AsyncReset call asyncrun#reset()
 
 
 "----------------------------------------------------------------------
