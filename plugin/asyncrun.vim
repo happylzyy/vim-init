@@ -1,9 +1,9 @@
 " asyncrun.vim - Run shell commands in background and output to quickfix
 "
-" Maintainer: skywind3000 (at) gmail.com, 2016-2023
+" Maintainer: skywind3000 (at) gmail.com, 2016-2024
 " Homepage: https://github.com/skywind3000/asyncrun.vim
 "
-" Last Modified: 2023/09/25 23:19
+" Last Modified: 2024/05/23 01:31
 "
 " Run shell command in background and output to quickfix:
 "     :AsyncRun[!] [options] {cmd} ...
@@ -758,7 +758,10 @@ function! s:AsyncRun_Job_Start(cmd)
 			let l:args += [a:cmd]
 		else
 			let l:tmp = s:ScriptWrite(a:cmd, 0)
+			let l:args = ['cmd.exe', '/C']
 			if s:async_nvim == 0
+				let l:args += [l:tmp]
+			elseif has('nvim-0.9.0')
 				let l:args += [l:tmp]
 			else
 				let l:args = s:shellescape(l:tmp)
@@ -840,7 +843,14 @@ function! s:AsyncRun_Job_Start(cmd)
 				let l:callbacks.stdin = 'null'
 			endif
 		endif
+		let l:slash = &shellslash
+		if l:slash
+			set noshellslash
+		endif
 		let s:async_job = jobstart(l:args, l:callbacks)
+		if l:slash
+			set shellslash
+		endif
 		let l:success = (s:async_job > 0)? 1 : 0
 		if l:success != 0
 			if s:async_info.range > 0
@@ -1041,7 +1051,7 @@ function! asyncrun#script_write(command, pause)
 		let tmpname = fnamemodify(tempname(), ':h') . '/asyncrun.sh'
 	endif
 	if v:version >= 700
-		call writefile(lines, tmpname)
+		silent! call writefile(lines, tmpname)
 	else
 		exe 'redir ! > '.fnameescape(tmpname)
 		for line in lines
@@ -1083,7 +1093,9 @@ function! asyncrun#fullname(f)
 			let f = ''
 		elseif &bt != ''
 			let is_directory = 0
-			if f =~ '[\/\\]$'
+			if f =~ '\v^fugitive\:[\\\/][\\\/][\\\/]'
+				return asyncrun#fullname(f)
+			elseif f =~ '[\/\\]$'
 				if f =~ '^[\/\\]' || f =~ '^.:[\/\\]'
 					let is_directory = isdirectory(f)
 				endif
@@ -1092,6 +1104,13 @@ function! asyncrun#fullname(f)
 		endif
 	elseif f =~ '^\~[\/\\]'
 		let f = expand(f)
+	elseif f =~ '\v^fugitive\:[\\\/][\\\/][\\\/]'
+		let path = strpart(f, s:asyncrun_windows? 12 : 11)
+		let pos = stridx(path, '.git')
+		if pos >= 0
+			let path = strpart(path, 0, pos)
+		endif
+		let f = fnamemodify(path, ':h')
 	endif
 	let f = fnamemodify(f, ':p')
 	if s:asyncrun_windows
@@ -1139,12 +1158,6 @@ endfunc
 " guess root
 function! s:guess_root(filename, markers)
 	let fullname = asyncrun#fullname(a:filename)
-	if fullname =~ '^fugitive:/'
-		if exists('b:git_dir')
-			return fnamemodify(b:git_dir, ':h')
-		endif
-		return '' " skip any fugitive buffers early
-	endif
 	let pivot = fullname
 	if !isdirectory(pivot)
 		let pivot = fnamemodify(pivot, ':h')
@@ -1180,6 +1193,11 @@ function! s:find_root(path, markers, strict)
 			return t:asyncrun_root
 		elseif exists('g:asyncrun_root') && g:asyncrun_root != ''
 			return g:asyncrun_root
+		elseif exists('g:asyncrun_locator')
+			let root = call(g:asyncrun_locator, [])
+			if root != ''
+				return root
+			endif
 		endif
 	endif
 	let root = s:guess_root(a:path, a:markers)
@@ -1298,6 +1316,7 @@ function! s:terminal_init(opts)
 			let command = args
 		endif
 	endif
+	let g:asyncrun_term = 1
 	if has('nvim') == 0
 		if pos != 'hide'
 			let opts = {'curwin':1, 'norestore':1, 'term_finish':'open'}
@@ -1359,6 +1378,7 @@ function! s:terminal_init(opts)
 		let pid = (success)? jid : -1
 		let processid = (success)? jobpid(jid) : -1
 	endif
+	let g:asyncrun_term = 0
 	if success == 0
 		call s:ErrorMsg('Process creation failed')
 		return -1
@@ -2295,7 +2315,7 @@ endfunc
 " asyncrun - version
 "----------------------------------------------------------------------
 function! asyncrun#version()
-	return '2.12.2'
+	return '2.12.9'
 endfunc
 
 
@@ -2382,7 +2402,7 @@ function! s:program_msys(opts)
 	let flag = ' --login ' . (get(a:opts, 'inter', '')? '-i' : '')
 	let text = s:shellescape(bash) . flag . ' "' . path . '"'
 	let lines += ['call ' . text . "\r"]
-	call writefile(lines, tmpname)
+	silent! call writefile(lines, tmpname)
 	let command = a:opts.cmd
 	let names = ['FILEPATH', 'FILENAME', 'FILEDIR', 'FILENOEXT']
 	let names += ['PATHNOEXT', 'FILEEXT', 'FILETYPE', 'RELDIR']
@@ -2400,7 +2420,7 @@ function! s:program_msys(opts)
 	let cwd = asyncrun#path_win2unix(getcwd(), mount)
 	let lines += ["cd '" . cwd . "'"]
 	let lines += [command]
-	call writefile(lines, script)
+	silent! call writefile(lines, script)
 	return tmpname
 endfunc
 
